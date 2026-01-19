@@ -37,7 +37,6 @@ export function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
   })
 
   const total = getTotal()
-
   const pickupTimes = ["15 min", "30 min", "45 min", "1 hour", "1.5 hours", "2 hours"]
 
   const labels = {
@@ -132,9 +131,10 @@ export function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
           customerName: formData.name,
           customerPhone: formData.phone,
           customerEmail: formData.email,
-          items: items.map((item) => ({
+          items: items.map((item: any) => ({
             id: item.id,
-            name: item.name,
+            // Pass all possible name variations to ensure backend finds one
+            name: item.name || item.name_en || item.title,
             quantity: item.quantity,
             price: item.price,
             proteinChoice: item.proteinChoice,
@@ -271,37 +271,39 @@ export function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-foreground">{t.payment}</Label>
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  type="button"
-                  variant={formData.paymentMethod === "card" ? "default" : "outline"}
-                  className={
-                    formData.paymentMethod === "card"
-                      ? "bg-primary text-primary-foreground"
-                      : "border-primary/20 text-foreground hover:bg-primary/10 bg-transparent"
-                  }
-                  onClick={() => setFormData({ ...formData, paymentMethod: "card" })}
-                >
-                  <CreditCard className="w-4 h-4 mr-2" />
-                  {t.payOnline}
-                </Button>
-                <Button
-                  type="button"
-                  variant={formData.paymentMethod === "cash" ? "default" : "outline"}
-                  className={
-                    formData.paymentMethod === "cash"
-                      ? "bg-primary text-primary-foreground"
-                      : "border-primary/20 text-foreground hover:bg-primary/10 bg-transparent"
-                  }
-                  onClick={() => setFormData({ ...formData, paymentMethod: "cash" })}
-                >
-                  <Banknote className="w-4 h-4 mr-2" />
-                  {t.payOnArrival}
-                </Button>
-              </div>
-            </div>
+           <div className="space-y-2">
+  <Label className="text-foreground">{t.payment}</Label>
+
+  <div className="grid grid-cols-2 gap-3">
+    {/* CARD (inactive) */}
+    <Button
+      type="button"
+      disabled
+      variant="outline"
+      className="opacity-50 cursor-not-allowed border-primary/20 bg-transparent"
+    >
+      <CreditCard className="w-4 h-4 mr-2" />
+      {t.payOnline}
+    </Button>
+
+    {/* CASH (active) */}
+    <Button
+      type="button"
+      variant={formData.paymentMethod === "cash" ? "default" : "outline"}
+      className={
+        formData.paymentMethod === "cash"
+          ? "bg-primary text-primary-foreground"
+          : "border-primary/20 text-foreground hover:bg-primary/10 bg-transparent"
+      }
+      onClick={() =>
+        setFormData({ ...formData, paymentMethod: "cash" })
+      }
+    >
+      <Banknote className="w-4 h-4 mr-2" />
+      {t.payOnArrival}
+    </Button>
+  </div>
+</div>
 
             <Separator className="bg-primary/20" />
 
