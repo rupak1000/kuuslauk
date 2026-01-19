@@ -1,7 +1,6 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, useRef, useCallback, type ReactNode } from "react"
-import type { CartItem } from "@/lib/cart-context"
 
 export interface Order {
   id: string
@@ -9,12 +8,12 @@ export interface Order {
   customerName: string
   customerPhone: string
   customerEmail: string
-  items: CartItem[]
+  items: any[] 
   total: number
   pickupTime: string
   paymentMethod: "card" | "cash"
   notes?: string
-  status: "pending" | "preparing" | "ready" | "completed"
+  status: "pending" | "preparing" | "ready" | "completed" | "pending_payment"
   createdAt: string
 }
 
@@ -35,10 +34,8 @@ const OrdersContext = createContext<OrdersContextType | undefined>(undefined)
 const RESTAURANT_LOCATION = {
   address: "Sadama tn 7, 10111 Tallinn",
   phone: "5424 0020",
-  mapLink: "https://maps.app.goo.gl/MC6A1CWw34dXzTsk9",
+  mapLink: "https://www.google.com/maps/search/?api=1&query=Sadama+7+Tallinn",
 }
-
-const ADMIN_EMAIL = "admin@kuuslauk.ee"
 
 export function OrdersProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([])
@@ -54,151 +51,106 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       audio.volume = 1.0
       audio.preload = "auto"
       audioRef.current = audio
-      audio.load()
     }
   }, [])
-
-  useEffect(() => {
-    const stored = localStorage.getItem("kuuslauk-orders")
-    if (stored) {
-      try {
-        const parsedOrders = JSON.parse(stored)
-        setOrders(parsedOrders)
-        previousOrderIdsRef.current = new Set(parsedOrders.map((o: Order) => o.id))
-      } catch {
-        setOrders([])
-      }
-    }
-    setIsLoaded(true)
-    setTimeout(() => {
-      isInitialLoadRef.current = false
-    }, 1000)
-  }, [])
-
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem("kuuslauk-orders", JSON.stringify(orders))
-    }
-  }, [orders, isLoaded])
 
   const playNotificationSound = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.currentTime = 0
-      const playPromise = audioRef.current.play()
-      if (playPromise !== undefined) {
-        playPromise.catch((error) => {
-          console.log("[v0] Audio autoplay blocked:", error)
-        })
-      }
+      audioRef.current.play().catch(e => console.log("Audio blocked:", e))
     }
   }, [])
+
+  const fetchOrders = useCallback(async () => {
+    try {
+      const response = await fetch("/api/orders")
+      if (!response.ok) return
+      
+      const data: Order[] = await response.json()
+      
+      const currentIds = new Set(data.map(o => o.id))
+      const hasNewOrder = data.some(o => !previousOrderIdsRef.current.has(o.id))
+
+      if (hasNewOrder && !isInitialLoadRef.current) {
+        setNewOrderAlert(true)
+        playNotificationSound()
+      }
+
+      previousOrderIdsRef.current = currentIds
+      setOrders(data)
+      setIsLoaded(true)
+      isInitialLoadRef.current = false
+    } catch (error) {
+      console.error("Polling Error:", error)
+    }
+  }, [playNotificationSound])
+
+  useEffect(() => {
+    fetchOrders() 
+    const interval = setInterval(fetchOrders, 10000) 
+    return () => clearInterval(interval)
+  }, [fetchOrders])
 
   const clearNewOrderAlert = useCallback(() => {
     setNewOrderAlert(false)
   }, [])
 
-  const sendAdminNotification = async (order: Order) => {
-    try {
-      await fetch("/api/send-admin-notification", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          adminEmail: ADMIN_EMAIL,
-          order: {
-            orderNumber: order.orderNumber,
-            customerName: order.customerName,
-            customerPhone: order.customerPhone,
-            customerEmail: order.customerEmail,
-            items: order.items.map((item) => ({
-              name: item.menuItem.name.en,
-              quantity: item.quantity,
-              price: item.menuItem.price,
-              proteinChoice: item.proteinChoice,
-              notes: item.notes,
-            })),
-            total: order.total,
-            pickupTime: order.pickupTime,
-            paymentMethod: order.paymentMethod,
-            notes: order.notes,
-          },
-        }),
-      })
-    } catch (error) {
-      console.error("[v0] Failed to send admin notification:", error)
-    }
-  }
-
-  const addOrder = useCallback(
-    (order: Omit<Order, "id" | "createdAt">) => {
-      const newOrder: Order = {
-        ...order,
-        id: `order-${Date.now()}`,
-        createdAt: new Date().toISOString(),
-      }
-
-      setNewOrderAlert(true)
-      playNotificationSound()
-
-      setOrders((prev) => {
-        const updated = [newOrder, ...prev]
-        previousOrderIdsRef.current = new Set(updated.map((o) => o.id))
-        return updated
-      })
-
-      sendAdminNotification(newOrder)
-    },
-    [playNotificationSound],
-  )
-
-  const sendReadyNotification = async (order: Order) => {
-    try {
-      await fetch("/api/send-ready-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customerEmail: order.customerEmail,
-          customerName: order.customerName,
-          orderNumber: order.orderNumber,
-          pickupTime: order.pickupTime,
-          location: RESTAURANT_LOCATION,
-        }),
-      })
-    } catch (error) {
-      console.error("Failed to send ready notification:", error)
-    }
-  }
-
   const updateOrderStatus = async (id: string, status: Order["status"]) => {
-    const order = orders.find((o) => o.id === id)
+    // 1. Find the order in the current list before we modify anything
+    const orderToNotify = orders.find(o => o.id === id)
 
-    if (status === "ready" && order) {
-      sendReadyNotification(order)
+    // 2. Optimistic UI update
+    setOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o))
+
+    try {
+      const response = await fetch(`/api/orders/${id}`, {
+        method: "PUT", 
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      })
+
+      if (!response.ok) throw new Error("Failed to update database")
+
+      // 3. If status is 'ready', trigger the Resend email API
+      if (status === "ready" && orderToNotify) {
+        await fetch("/api/send-ready-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customerEmail: orderToNotify.customerEmail,
+            customerName: orderToNotify.customerName,
+            orderNumber: orderToNotify.orderNumber,
+            pickupTime: orderToNotify.pickupTime,
+            location: RESTAURANT_LOCATION,
+          }),
+        })
+      }
+    } catch (error) {
+      console.error("Update failed:", error)
+      fetchOrders() // Rollback by fetching fresh data
     }
-
-    setOrders((prev) => prev.map((order) => (order.id === id ? { ...order, status } : order)))
   }
 
-  const deleteOrder = (id: string) => {
-    setOrders((prev) => prev.filter((order) => order.id !== id))
-  }
-
-  const getPendingOrders = () => {
-    return orders.filter((order) => order.status !== "completed")
-  }
-
-  const getCompletedOrders = () => {
-    return orders.filter((order) => order.status === "completed")
+  const deleteOrder = async (id: string) => {
+    setOrders(prev => prev.filter(o => o.id !== id))
+    try {
+      const response = await fetch(`/api/orders/${id}`, { method: "DELETE" })
+      if (!response.ok) throw new Error("Delete failed on server")
+    } catch (error) {
+      console.error("Delete failed:", error)
+      fetchOrders()
+    }
   }
 
   return (
     <OrdersContext.Provider
       value={{
         orders,
-        addOrder,
+        addOrder: () => {}, 
         updateOrderStatus,
         deleteOrder,
-        getPendingOrders,
-        getCompletedOrders,
+        getPendingOrders: () => orders.filter((o) => o.status !== "completed"),
+        getCompletedOrders: () => orders.filter((o) => o.status === "completed"),
         newOrderAlert,
         clearNewOrderAlert,
         playNotificationSound,

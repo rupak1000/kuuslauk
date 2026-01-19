@@ -141,8 +141,6 @@ export function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
             id: item.id,
             name: item.name || item.name_en || item.title || "Item",
             quantity: item.quantity || 1,
-            // 🛠️ CRITICAL FIX: Ensure price is passed as a number. 
-            // If item.price is missing, we try common alternative names.
             price: Number(item.price || item.unitPrice || 0), 
             proteinChoice: item.proteinChoice || null,
             notes: item.notes || null,
@@ -157,15 +155,19 @@ export function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.error || result.detail || "Failed to process order")
+        throw new Error(result.error || "Failed to process order")
       }
 
-      setOrderNumber(result.orderNumber)
+      // 🛠️ THE FIX: Look for order_number (from DB) or orderNumber (from manual mapping)
+      const finalOrderNumber = result.order?.order_number || result.order?.orderNumber || "ORD-ERROR";
+      const finalOrderId = result.order?.id?.toString() || result.orderId;
+
+      setOrderNumber(finalOrderNumber)
 
       // Add to local context for immediate UI feedback
       addOrder({
-        id: result.orderId,
-        orderNumber: result.orderNumber,
+        id: finalOrderId,
+        orderNumber: finalOrderNumber,
         customerName: formData.name,
         customerPhone: formData.phone,
         customerEmail: formData.email,
@@ -174,7 +176,7 @@ export function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
         pickupTime: formData.pickupTime,
         paymentMethod: formData.paymentMethod,
         notes: formData.notes || undefined,
-        status: "pending",
+        status: result.order?.status || "pending",
       })
 
       setStep("success")
@@ -364,9 +366,8 @@ export function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
             <Button
               className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
               onClick={handleClose}
-              asChild
             >
-              <a href="/">{t.backToMenu}</a>
+              {t.backToMenu}
             </Button>
           </div>
         )}

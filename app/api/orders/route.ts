@@ -1,30 +1,54 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, isDatabaseAvailable } from "@/lib/db";
 
-// Force Next.js to always fetch fresh data for the Admin Dashboard
 export const dynamic = 'force-dynamic';
 
-/**
- * 1. GET METHOD: This is what allows the Admin Dashboard to see the orders
- */
 export async function GET() {
   try {
     if (!isDatabaseAvailable() || !sql) {
-      return NextResponse.json([]); // Return empty array if DB is down
+      return NextResponse.json([]); 
     }
 
-    const orders = await sql`
-      SELECT * FROM orders 
-      ORDER BY created_at DESC
-    `;
+    const orders = await sql`SELECT * FROM orders ORDER BY created_at DESC`;
+    if (orders.length === 0) return NextResponse.json([]);
 
-    // Format for React Frontend (Convert BigInt ID and Decimal total)
-    const formattedOrders = (orders || []).map(order => ({
-      ...order,
-      id: order.id.toString(), 
-      total: Number(order.total),
-      createdAt: order.created_at
-    }));
+    const allItems = await sql`SELECT * FROM order_items`;
+
+    const formattedOrders = orders.map(order => {
+      const itemsForThisOrder = allItems
+        .filter((item: any) => item.order_id === order.id)
+        .map((item: any) => ({
+          id: item.id.toString(),
+          quantity: item.quantity,
+          price: Number(item.price),
+          proteinChoice: item.protein_choice,
+          notes: item.special_notes,
+          // 🛠️ FIX: Wrap the name in a translation object to satisfy item.menuItem.name[language]
+          menuItem: { 
+            price: Number(item.price),
+            name: {
+              en: item.item_name, // Fallback for all languages to the name stored in DB
+              et: item.item_name,
+              ru: item.item_name
+            }
+          }
+        }));
+
+      return {
+        ...order,
+        id: order.id.toString(),
+        orderNumber: order.order_number,
+        customerName: order.customer_name,
+        customerPhone: order.customer_phone,
+        customerEmail: order.customer_email,
+        total: Number(order.total),
+        pickupTime: order.pickup_time,
+        paymentMethod: order.payment_method,
+        status: order.status,
+        createdAt: order.created_at,
+        items: itemsForThisOrder
+      };
+    });
 
     return NextResponse.json(formattedOrders);
   } catch (error: any) {
@@ -33,9 +57,6 @@ export async function GET() {
   }
 }
 
-/**
- * 2. POST METHOD: Handles creating the order from the checkout page
- */
 export async function POST(request: NextRequest) {
   if (!isDatabaseAvailable() || !sql) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
@@ -48,19 +69,10 @@ export async function POST(request: NextRequest) {
       items, total, pickupTime, paymentMethod, notes 
     } = body;
 
-    if (!customerName || !pickupTime || !paymentMethod) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-    }
-
     const orderNumber = `ORD-${Date.now().toString().slice(-6)}`;
-    
-    // Status Logic: 
-    // Card payments start as 'pending_payment'
-    // Cash payments start as 'pending'
     const status = paymentMethod === "card" ? "pending_payment" : "pending";
     const safeTotal = Number(total) || 0;
 
-    // Insert main order
     const [order] = await sql`
       INSERT INTO orders (
         order_number, customer_name, customer_phone, customer_email, 
@@ -72,36 +84,51 @@ export async function POST(request: NextRequest) {
       RETURNING *
     `;
 
-    // Insert order items
-    if (Array.isArray(items) && items.length > 0) {
+    const itemsForResponse = [];
+    if (Array.isArray(items)) {
       for (const item of items) {
-        const finalName = item.name || item.name_en || "Menu Item";
-        const menuItemId = item.id && !isNaN(Number(item.id)) ? Number(item.id) : null;
-
+        const finalName = item.name || item.menuItem?.name?.en || "Menu Item";
+        
         await sql`
           INSERT INTO order_items (
-            order_id, menu_item_id, item_name, quantity, price, protein_choice, special_notes
+            order_id, item_name, quantity, price, protein_choice, special_notes
           ) VALUES (
-            ${order.id}, ${menuItemId}, ${finalName}, 
-            ${Number(item.quantity) || 1}, ${Number(item.price) || 0}, 
+            ${order.id}, ${finalName}, ${item.quantity}, ${item.price}, 
             ${item.proteinChoice || null}, ${item.notes || null}
           )
         `;
+
+        // 🛠️ FIX: Matching the response structure to avoid immediate UI crashes
+        itemsForResponse.push({
+          quantity: item.quantity,
+          menuItem: {
+            name: { en: finalName, et: finalName, ru: finalName },
+            price: Number(item.price)
+          }
+        });
       }
     }
 
-    // Success response formatted for immediate UI update
+    // Trigger Email Notification (Non-blocking)
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `http://${request.headers.get('host')}`;
+    fetch(`${baseUrl}/api/send-admin-notification`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        order: { ...body, orderNumber, items: itemsForResponse }
+      }),
+    }).catch(e => console.error("Email error:", e));
+
     return NextResponse.json({
       success: true,
       order: {
         ...order,
         id: order.id.toString(),
-        total: Number(order.total)
+        items: itemsForResponse
       }
     }, { status: 201 });
 
-  } catch (error: any) {
-    console.error("[ORDERS POST API] Error:", error);
+  } catch (error) {
     return NextResponse.json({ error: "Failed to place order" }, { status: 500 });
   }
 }
