@@ -16,13 +16,13 @@ export function Footer() {
         <div className="grid md:grid-cols-4 gap-8">
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <div className="relative w-8 h-8 overflow-hidden">
+              <div className="relative w-26 h-12 overflow-hidden">
                 {settings.logo ? (
                   <Image
                     src={settings.logo || "/placeholder.svg"}
                     alt="Logo"
-                    width={32}
-                    height={32}
+                    width={250}
+                    height={100}
                     className="object-contain"
                   />
                 ) : (
@@ -31,10 +31,7 @@ export function Footer() {
                   </svg>
                 )}
               </div>
-              <div className="flex flex-col">
-                <span className="text-lg font-bold tracking-wider text-primary">KÜÜSLAUK</span>
-                <span className="text-[10px] tracking-[0.2em] text-muted-foreground">- WOK & KEBAB -</span>
-              </div>
+              
             </div>
             <p className="text-sm text-muted-foreground">{t.footer.description}</p>
           </div>
