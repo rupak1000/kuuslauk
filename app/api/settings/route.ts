@@ -39,14 +39,7 @@ export async function GET() {
     })
   } catch (error) {
     console.error("Failed to fetch settings:", error)
-    return NextResponse.json({
-      logo: "",
-      restaurantName: "KÜÜSLAUK",
-      address: "Sadama tn 7, 10111 Tallinn",
-      phone: "5424 0020",
-      email: "info@kuuslauk.ee",
-      mapLink: "https://maps.app.goo.gl/MC6A1CWw34dXzTsk9",
-    })
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }
 
@@ -60,16 +53,17 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const { logo, restaurantName, address, phone, email, mapLink } = body
 
+    // Use COALESCE to keep existing values if the update is partial
     const result = await sql`
       INSERT INTO site_settings (id, logo_url, restaurant_name, address, phone, email, map_link)
       VALUES (1, ${logo || null}, ${restaurantName || "KÜÜSLAUK"}, ${address || null}, ${phone || null}, ${email || null}, ${mapLink || null})
       ON CONFLICT (id) DO UPDATE SET
-        logo_url = COALESCE(${logo}, site_settings.logo_url),
-        restaurant_name = COALESCE(${restaurantName}, site_settings.restaurant_name),
-        address = COALESCE(${address}, site_settings.address),
-        phone = COALESCE(${phone}, site_settings.phone),
-        email = COALESCE(${email}, site_settings.email),
-        map_link = COALESCE(${mapLink}, site_settings.map_link),
+        logo_url = EXCLUDED.logo_url,
+        restaurant_name = EXCLUDED.restaurant_name,
+        address = EXCLUDED.address,
+        phone = EXCLUDED.phone,
+        email = EXCLUDED.email,
+        map_link = EXCLUDED.map_link,
         updated_at = CURRENT_TIMESTAMP
       RETURNING *
     `
