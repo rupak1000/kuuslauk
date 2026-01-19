@@ -33,7 +33,7 @@ export function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
     email: "",
     pickupTime: "",
     notes: "",
-    paymentMethod: "card" as "card" | "cash",
+    paymentMethod: "cash" as "card" | "cash",
   })
 
   const total = getTotal()
@@ -121,6 +121,12 @@ export function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (!formData.pickupTime) {
+      alert(t.selectTime)
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
@@ -133,12 +139,13 @@ export function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
           customerEmail: formData.email,
           items: items.map((item: any) => ({
             id: item.id,
-            // Pass all possible name variations to ensure backend finds one
-            name: item.name || item.name_en || item.title,
-            quantity: item.quantity,
-            price: item.price,
-            proteinChoice: item.proteinChoice,
-            notes: item.notes,
+            name: item.name || item.name_en || item.title || "Item",
+            quantity: item.quantity || 1,
+            // 🛠️ CRITICAL FIX: Ensure price is passed as a number. 
+            // If item.price is missing, we try common alternative names.
+            price: Number(item.price || item.unitPrice || 0), 
+            proteinChoice: item.proteinChoice || null,
+            notes: item.notes || null,
           })),
           total: total,
           pickupTime: formData.pickupTime,
@@ -150,11 +157,12 @@ export function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.error || "Failed to process order")
+        throw new Error(result.error || result.detail || "Failed to process order")
       }
 
       setOrderNumber(result.orderNumber)
 
+      // Add to local context for immediate UI feedback
       addOrder({
         id: result.orderId,
         orderNumber: result.orderNumber,
@@ -188,7 +196,7 @@ export function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
         email: "",
         pickupTime: "",
         notes: "",
-        paymentMethod: "card",
+        paymentMethod: "cash",
       })
     }
     onClose()
@@ -271,39 +279,34 @@ export function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
               />
             </div>
 
-           <div className="space-y-2">
-  <Label className="text-foreground">{t.payment}</Label>
+            <div className="space-y-2">
+              <Label className="text-foreground">{t.payment}</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  type="button"
+                  disabled
+                  variant="outline"
+                  className="opacity-50 cursor-not-allowed border-primary/20 bg-transparent"
+                >
+                  <CreditCard className="w-4 h-4 mr-2" />
+                  {t.payOnline}
+                </Button>
 
-  <div className="grid grid-cols-2 gap-3">
-    {/* CARD (inactive) */}
-    <Button
-      type="button"
-      disabled
-      variant="outline"
-      className="opacity-50 cursor-not-allowed border-primary/20 bg-transparent"
-    >
-      <CreditCard className="w-4 h-4 mr-2" />
-      {t.payOnline}
-    </Button>
-
-    {/* CASH (active) */}
-    <Button
-      type="button"
-      variant={formData.paymentMethod === "cash" ? "default" : "outline"}
-      className={
-        formData.paymentMethod === "cash"
-          ? "bg-primary text-primary-foreground"
-          : "border-primary/20 text-foreground hover:bg-primary/10 bg-transparent"
-      }
-      onClick={() =>
-        setFormData({ ...formData, paymentMethod: "cash" })
-      }
-    >
-      <Banknote className="w-4 h-4 mr-2" />
-      {t.payOnArrival}
-    </Button>
-  </div>
-</div>
+                <Button
+                  type="button"
+                  variant={formData.paymentMethod === "cash" ? "default" : "outline"}
+                  className={
+                    formData.paymentMethod === "cash"
+                      ? "bg-primary text-primary-foreground"
+                      : "border-primary/20 text-foreground hover:bg-primary/10 bg-transparent"
+                  }
+                  onClick={() => setFormData({ ...formData, paymentMethod: "cash" })}
+                >
+                  <Banknote className="w-4 h-4 mr-2" />
+                  {t.payOnArrival}
+                </Button>
+              </div>
+            </div>
 
             <Separator className="bg-primary/20" />
 
