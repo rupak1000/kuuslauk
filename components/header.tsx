@@ -14,28 +14,27 @@ export function Header() {
   const { t, language } = useLanguage()
   const { settings } = useSiteSettings()
 
+  // ✅ logo fallback handling
+  const [logoSrc, setLogoSrc] = useState(
+    settings.logo || "/logo.png"
+  )
+
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
-          {/* Logo - Now uses custom logo from settings */}
+          {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
             <div className="relative w-26 h-12 overflow-hidden">
-              {settings.logo ? (
-                <Image
-                  src={settings.logo || "/placeholder.svg"}
-                  alt="Logo"
-                  width={250}
-                  height={100}
-                  className="object-contain"
-                />
-              ) : (
-                <svg viewBox="0 0 100 100" className="w-full h-full fill-primary">
-                  <path d="M50 5 C45 25, 35 40, 50 60 C65 40, 55 25, 50 5 M50 60 C40 65, 35 80, 50 95 C65 80, 60 65, 50 60" />
-                </svg>
-              )}
+              <Image
+                src={logoSrc}
+                alt="Logo"
+                width={250}
+                height={100}
+                className="object-contain"
+                onError={() => setLogoSrc("/logo.png")}
+              />
             </div>
-            
           </Link>
 
           {/* Desktop Navigation */}

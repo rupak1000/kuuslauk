@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { Phone, MapPin } from "lucide-react"
@@ -10,6 +11,11 @@ export function Footer() {
   const { t } = useLanguage()
   const { settings } = useSiteSettings()
 
+  // ✅ logo fallback handling
+  const [logoSrc, setLogoSrc] = useState(
+    settings.logo || "/logo.png"
+  )
+
   return (
     <footer className="bg-card border-t border-border py-12">
       <div className="container mx-auto px-4">
@@ -17,27 +23,25 @@ export function Footer() {
           <div>
             <div className="flex items-center gap-2 mb-4">
               <div className="relative w-26 h-12 overflow-hidden">
-                {settings.logo ? (
-                  <Image
-                    src={settings.logo || "/placeholder.svg"}
-                    alt="Logo"
-                    width={250}
-                    height={100}
-                    className="object-contain"
-                  />
-                ) : (
-                  <svg viewBox="0 0 100 100" className="w-full h-full fill-primary">
-                    <path d="M50 5 C45 25, 35 40, 50 60 C65 40, 55 25, 50 5 M50 60 C40 65, 35 80, 50 95 C65 80, 60 65, 50 60" />
-                  </svg>
-                )}
+                <Image
+                  src={logoSrc}
+                  alt="Logo"
+                  width={250}
+                  height={100}
+                  className="object-contain"
+                  onError={() => setLogoSrc("/logo.png")}
+                />
               </div>
-              
             </div>
-            <p className="text-sm text-muted-foreground">{t.footer.description}</p>
+            <p className="text-sm text-muted-foreground">
+              {t.footer.description}
+            </p>
           </div>
 
           <div>
-            <h4 className="font-semibold text-foreground mb-4">{t.footer.quickLinks}</h4>
+            <h4 className="font-semibold text-foreground mb-4">
+              {t.footer.quickLinks}
+            </h4>
             <nav className="flex flex-col gap-2">
               <Link href="#menu" className="text-sm text-muted-foreground hover:text-primary transition-colors">
                 {t.nav.menu}
@@ -58,7 +62,9 @@ export function Footer() {
           </div>
 
           <div>
-            <h4 className="font-semibold text-foreground mb-4">{t.footer.contact}</h4>
+            <h4 className="font-semibold text-foreground mb-4">
+              {t.footer.contact}
+            </h4>
             <div className="flex flex-col gap-3">
               <a
                 href="tel:+37254240020"
@@ -78,7 +84,9 @@ export function Footer() {
           </div>
 
           <div>
-            <h4 className="font-semibold text-foreground mb-4">{t.footer.orderOnline}</h4>
+            <h4 className="font-semibold text-foreground mb-4">
+              {t.footer.orderOnline}
+            </h4>
             <div className="flex flex-col gap-2">
               <a
                 href="https://wolt.com"
